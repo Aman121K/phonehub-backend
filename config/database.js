@@ -5,6 +5,7 @@ dotenv.config();
 
 const connectDB = async () => {
   try {
+    // 7tFDkoXRkc15VThI
     const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27018/phonehub', {
       useNewUrlParser: true,
       useUnifiedTopology: true,

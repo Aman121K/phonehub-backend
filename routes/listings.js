@@ -472,4 +472,215 @@ router.get('/user/my-listings', authenticateToken, async (req, res) => {
   }
 });
 
+// Update listing (only owner can update)
+router.put('/:id', authenticateToken, (req, res, next) => {
+  // Make image upload optional - only process if files are present
+  uploadImagesToS3(req, res, (err) => {
+    if (err) {
+      // If multer error and no files were sent, that's okay - continue
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return next();
+      }
+      // Handle other multer errors
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File size too large. Maximum 5MB per image.' });
+        }
+        if (err.code === 'LIMIT_FILE_COUNT') {
+          return res.status(400).json({ error: 'Too many files. Maximum 5 images allowed.' });
+        }
+        return res.status(400).json({ error: err.message });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, processS3Upload, async (req, res) => {
+  try {
+    const listing = await Listing.findById(req.params.id);
+    
+    if (!listing) {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+
+    // Check if user is the owner
+    if (listing.user.toString() !== req.user.userId) {
+      return res.status(403).json({ error: 'You can only edit your own listings' });
+    }
+
+    const {
+      category_id,
+      title,
+      description,
+      price,
+      per_price,
+      storage,
+      condition,
+      city,
+      listing_type,
+      sellType,
+      color,
+      warranty,
+      quantity,
+      existing_images
+    } = req.body;
+
+    // Handle images: combine existing images (if provided) with new S3 uploaded images
+    if (req.imageUrls && req.imageUrls.length > 0) {
+      // If existing_images is provided as a string (comma-separated) or array, combine them
+      let existingImagesArray = [];
+      if (existing_images) {
+        if (typeof existing_images === 'string') {
+          try {
+            existingImagesArray = JSON.parse(existing_images);
+          } catch {
+            // If not JSON, treat as comma-separated string
+            existingImagesArray = existing_images.split(',').filter(img => img.trim());
+          }
+        } else if (Array.isArray(existing_images)) {
+          existingImagesArray = existing_images;
+        }
+      }
+      
+      // Combine existing and new images, remove duplicates
+      const allImages = [...existingImagesArray, ...req.imageUrls];
+      const uniqueImages = [...new Set(allImages)];
+      
+      // Validate: must have at least 1 image, max 5
+      if (uniqueImages.length === 0) {
+        return res.status(400).json({ error: 'At least one image is required' });
+      }
+      if (uniqueImages.length > 5) {
+        return res.status(400).json({ error: 'Maximum 5 images allowed' });
+      }
+      
+      listing.images = uniqueImages;
+      listing.imageUrl = uniqueImages.length > 0 ? uniqueImages[0] : null;
+    } else if (existing_images !== undefined) {
+      // Only existing images, no new uploads
+      let existingImagesArray = [];
+      if (typeof existing_images === 'string') {
+        try {
+          existingImagesArray = JSON.parse(existing_images);
+        } catch {
+          existingImagesArray = existing_images.split(',').filter(img => img.trim());
+        }
+      } else if (Array.isArray(existing_images)) {
+        existingImagesArray = existing_images;
+      }
+      
+      // Validate: must have at least 1 image, max 5
+      if (existingImagesArray.length === 0) {
+        return res.status(400).json({ error: 'At least one image is required' });
+      }
+      if (existingImagesArray.length > 5) {
+        return res.status(400).json({ error: 'Maximum 5 images allowed' });
+      }
+      
+      listing.images = existingImagesArray;
+      listing.imageUrl = existingImagesArray.length > 0 ? existingImagesArray[0] : null;
+    }
+
+    // Update listing fields
+    if (category_id) listing.category = category_id;
+    if (title) listing.title = title;
+    if (description !== undefined) listing.description = description;
+    if (price !== undefined) listing.price = parseFloat(price);
+    if (per_price !== undefined) listing.perPrice = per_price ? parseFloat(per_price) : null;
+    if (storage !== undefined) listing.storage = storage;
+    if (condition !== undefined) listing.condition = condition;
+    if (city) listing.city = city;
+    if (listing_type) listing.listingType = listing_type;
+    if (sellType) listing.sellType = sellType;
+    if (color !== undefined) listing.color = color;
+    if (warranty !== undefined) listing.warranty = warranty === true || warranty === 'Yes' || warranty === 'yes' || warranty === 'true';
+    if (quantity !== undefined) listing.quantity = parseInt(quantity);
+
+    // Update timestamp
+    listing.updatedAt = new Date();
+
+    await listing.save();
+
+    // Populate and format response
+    await listing.populate('user', 'name city phone businessName sellerType');
+    await listing.populate('category', 'name slug');
+
+    const formattedListing = {
+      _id: listing._id,
+      id: listing._id,
+      title: listing.title,
+      price: listing.price,
+      perPrice: listing.perPrice,
+      condition: listing.condition,
+      storage: listing.storage,
+      city: listing.city,
+      listingType: listing.listingType,
+      sellType: listing.sellType,
+      color: listing.color,
+      warranty: listing.warranty,
+      quantity: listing.quantity,
+      imageUrl: listing.imageUrl,
+      images: listing.images && listing.images.length > 0 ? listing.images : (listing.imageUrl ? [listing.imageUrl] : []),
+      description: listing.description,
+      user: listing.user ? {
+        _id: listing.user._id,
+        name: listing.user.sellerType === 'business' && listing.user.businessName ? listing.user.businessName : listing.user.name,
+        city: listing.user.city,
+        phone: listing.user.phone,
+        businessName: listing.user.businessName,
+        sellerType: listing.user.sellerType
+      } : null,
+      category: listing.category ? {
+        _id: listing.category._id,
+        name: listing.category.name,
+        slug: listing.category.slug
+      } : null,
+      createdAt: listing.createdAt,
+      updatedAt: listing.updatedAt
+    };
+
+    res.json({ message: 'Listing updated successfully', listing: formattedListing });
+  } catch (error) {
+    console.error('Update listing error:', error);
+    res.status(500).json({ error: error.message || 'Server error' });
+  }
+});
+
+// Delete listing (only owner can delete)
+router.delete('/:id', authenticateToken, async (req, res) => {
+  try {
+    const listing = await Listing.findById(req.params.id);
+    
+    if (!listing) {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+
+    // Check if user is the owner
+    if (listing.user.toString() !== req.user.userId) {
+      return res.status(403).json({ error: 'You can only delete your own listings' });
+    }
+
+    // If it's an auction, delete related bids and auction
+    if (listing.listingType === 'auction') {
+      const Bid = require('../models/Bid');
+      // Delete all bids for this auction
+      await Bid.deleteMany({ auction: listing._id });
+      // Delete the auction
+      await Auction.deleteOne({ listing: listing._id });
+    }
+
+    // Delete related messages if any
+    const Message = require('../models/Message');
+    await Message.deleteMany({ listing: listing._id });
+
+    // Delete the listing
+    await Listing.deleteOne({ _id: listing._id });
+
+    res.json({ message: 'Listing deleted successfully', id: listing._id });
+  } catch (error) {
+    console.error('Delete listing error:', error);
+    res.status(500).json({ error: error.message || 'Server error' });
+  }
+});
+
 module.exports = router;
