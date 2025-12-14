@@ -152,7 +152,7 @@ router.get('/:id', async (req, res) => {
         path: 'listing',
         populate: [
           { path: 'category', select: 'name slug' },
-          { path: 'user', select: 'name city' }
+          { path: 'user', select: 'name city phone businessName sellerType' }
         ]
       });
 
@@ -180,11 +180,31 @@ router.get('/:id', async (req, res) => {
       images: auction.listing.images && auction.listing.images.length > 0 ? auction.listing.images : (auction.listing.imageUrl ? [auction.listing.imageUrl] : []),
       city: auction.listing.city,
       category_name: auction.listing.category ? auction.listing.category.name : null,
+      category_slug: auction.listing.category ? auction.listing.category.slug : null,
       seller_name: auction.listing.user ? auction.listing.user.name : null,
+      seller_city: auction.listing.user ? auction.listing.user.city : null,
+      seller_phone: auction.listing.user ? auction.listing.user.phone : null,
+      seller_business_name: auction.listing.user && auction.listing.user.sellerType === 'business' ? auction.listing.user.businessName : null,
+      seller_type: auction.listing.user ? auction.listing.user.sellerType : null,
       start_price: auction.startPrice,
       current_price: auction.currentPrice,
       end_date: auction.endDate,
       status: auction.status,
+      // Full phone details
+      version: auction.listing.version || null,
+      colour: auction.listing.colour || null,
+      charge: auction.listing.charge || null,
+      box: auction.listing.box || null,
+      warranty: auction.listing.warranty || false,
+      storage: auction.listing.storage || null,
+      condition: auction.listing.condition || null,
+      quantity: auction.listing.quantity || 1,
+      price: auction.listing.price || null,
+      perPrice: auction.listing.perPrice || null,
+      sellType: auction.listing.sellType || 'single',
+      listingType: auction.listing.listingType || 'auction',
+      createdAt: auction.listing.createdAt || null,
+      updatedAt: auction.listing.updatedAt || null,
       bids: bids.map(bid => ({
         id: bid._id,
         bidder_name: bid.user ? bid.user.name : 'Unknown',
