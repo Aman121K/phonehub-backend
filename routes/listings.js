@@ -10,7 +10,7 @@ const { uploadImagesToS3, processS3Upload } = require('../middleware/uploadS3');
 // Get all listings
 router.get('/', async (req, res) => {
   try {
-    const { city, category, type, search, model, storage, limit = 20, offset = 0 } = req.query;
+    const { city, category, type, search, model, storage, condition, minPrice, maxPrice, limit = 20, offset = 0 } = req.query;
     
     const query = { status: 'active' }; // Only show active listings (excludes blocked, sold, expired)
     
@@ -57,6 +57,24 @@ router.get('/', async (req, res) => {
       query.storage = storage;
     }
 
+    // Handle condition filter
+    if (condition) {
+      // Decode URL-encoded spaces and trim
+      const decodedCondition = decodeURIComponent(condition).trim();
+      query.condition = decodedCondition;
+    }
+
+    // Handle price range filters
+    if (minPrice || maxPrice) {
+      query.price = {};
+      if (minPrice) {
+        query.price.$gte = parseFloat(minPrice);
+      }
+      if (maxPrice) {
+        query.price.$lte = parseFloat(maxPrice);
+      }
+    }
+
     const listings = await Listing.find(query)
       .populate('user', 'name city phone businessName sellerType')
       .populate('category', 'name slug')
@@ -76,7 +94,10 @@ router.get('/', async (req, res) => {
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
-      color: listing.color,
+      colour: listing.colour,
+      version: listing.version,
+      charge: listing.charge,
+      box: listing.box,
       warranty: listing.warranty,
       quantity: listing.quantity,
       imageUrl: listing.imageUrl,
@@ -130,7 +151,10 @@ router.get('/featured', async (req, res) => {
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
-      color: listing.color,
+      colour: listing.colour,
+      version: listing.version,
+      charge: listing.charge,
+      box: listing.box,
       warranty: listing.warranty,
       quantity: listing.quantity,
       imageUrl: listing.imageUrl,
@@ -173,7 +197,7 @@ router.get('/featured', async (req, res) => {
       city: listing.city,
       listingType: listing.listingType,
         sellType: listing.sellType,
-        color: listing.color,
+        colour: listing.colour,
         warranty: listing.warranty,
         quantity: listing.quantity,
         imageUrl: listing.imageUrl,
@@ -225,7 +249,10 @@ router.get('/latest', async (req, res) => {
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
-      color: listing.color,
+      colour: listing.colour,
+      version: listing.version,
+      charge: listing.charge,
+      box: listing.box,
       warranty: listing.warranty,
       quantity: listing.quantity,
       imageUrl: listing.imageUrl,
@@ -276,7 +303,10 @@ router.get('/:id', async (req, res) => {
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
-      color: listing.color,
+      colour: listing.colour,
+      version: listing.version,
+      charge: listing.charge,
+      box: listing.box,
       warranty: listing.warranty,
       quantity: listing.quantity,
       imageUrl: listing.imageUrl,
@@ -361,7 +391,10 @@ router.post('/', authenticateToken, async (req, res, next) => {
       start_price, 
       end_date,
       sellType,
-      color,
+      colour,
+      version,
+      charge,
+      box,
       warranty,
       quantity
     } = req.body;
@@ -398,7 +431,10 @@ router.post('/', authenticateToken, async (req, res, next) => {
       imageUrl: finalImages.length > 0 ? finalImages[0] : null,
       images: finalImages,
       sellType: sellType || 'single',
-      color: color || null,
+      colour: colour || null,
+      version: version || null,
+      charge: charge || null,
+      box: box || null,
       warranty: warranty === true || warranty === 'Yes' || warranty === 'yes' || warranty === 'true',
       quantity: quantity ? parseInt(quantity) : 1
     });
@@ -444,7 +480,10 @@ router.get('/user/my-listings', authenticateToken, async (req, res) => {
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
-      color: listing.color,
+      colour: listing.colour,
+      version: listing.version,
+      charge: listing.charge,
+      box: listing.box,
       warranty: listing.warranty,
       quantity: listing.quantity,
       imageUrl: listing.imageUrl,
@@ -519,7 +558,10 @@ router.put('/:id', authenticateToken, (req, res, next) => {
       city,
       listing_type,
       sellType,
-      color,
+      colour,
+      version,
+      charge,
+      box,
       warranty,
       quantity,
       existing_images
@@ -592,7 +634,10 @@ router.put('/:id', authenticateToken, (req, res, next) => {
     if (city) listing.city = city;
     if (listing_type) listing.listingType = listing_type;
     if (sellType) listing.sellType = sellType;
-    if (color !== undefined) listing.color = color;
+    if (colour !== undefined) listing.colour = colour;
+    if (version !== undefined) listing.version = version;
+    if (charge !== undefined) listing.charge = charge;
+    if (box !== undefined) listing.box = box;
     if (warranty !== undefined) listing.warranty = warranty === true || warranty === 'Yes' || warranty === 'yes' || warranty === 'true';
     if (quantity !== undefined) listing.quantity = parseInt(quantity);
 
@@ -616,7 +661,10 @@ router.put('/:id', authenticateToken, (req, res, next) => {
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
-      color: listing.color,
+      colour: listing.colour,
+      version: listing.version,
+      charge: listing.charge,
+      box: listing.box,
       warranty: listing.warranty,
       quantity: listing.quantity,
       imageUrl: listing.imageUrl,

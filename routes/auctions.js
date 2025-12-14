@@ -3,6 +3,7 @@ const router = express.Router();
 const Auction = require('../models/Auction');
 const Bid = require('../models/Bid');
 const Listing = require('../models/Listing');
+const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 
 // Get all auctions
@@ -186,11 +187,36 @@ router.get('/:id', async (req, res) => {
 // Place bid
 router.post('/:id/bid', authenticateToken, async (req, res) => {
   try {
-    const { bid_amount } = req.body;
+    // Check if user is a buyer
+    const biddingUser = await User.findById(req.user.userId).select('userType name email');
+    if (!biddingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (biddingUser.userType !== 'buyer') {
+      return res.status(403).json({ error: 'You are not a buyer. Please make a buyer account to place bids.' });
+    }
+
+    // Accept both 'bid_amount' and 'amount' for backward compatibility
+    const { bid_amount, amount } = req.body;
+    const bidAmount = bid_amount || amount;
+    
+    if (!bidAmount) {
+      return res.status(400).json({ error: 'Bid amount is required' });
+    }
+
     const auctionId = req.params.id;
 
-    const auction = await Auction.findById(auctionId);
-    if (!auction) {
+    const auction = await Auction.findById(auctionId)
+      .populate({
+        path: 'listing',
+        populate: {
+          path: 'user',
+          select: 'name email'
+        }
+      });
+
+    if (!auction || !auction.listing) {
       return res.status(404).json({ error: 'Auction not found' });
     }
 
@@ -205,7 +231,17 @@ router.post('/:id/bid', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Auction is not live' });
     }
 
-    if (parseFloat(bid_amount) <= parseFloat(auction.currentPrice)) {
+    // Check if user is trying to bid on their own auction
+    if (auction.listing.user._id.toString() === req.user.userId) {
+      return res.status(400).json({ error: 'You cannot bid on your own auction' });
+    }
+
+    const bidAmountValue = parseFloat(bidAmount);
+    if (isNaN(bidAmountValue) || bidAmountValue <= 0) {
+      return res.status(400).json({ error: 'Invalid bid amount' });
+    }
+
+    if (bidAmountValue <= parseFloat(auction.currentPrice)) {
       return res.status(400).json({ error: 'Bid must be higher than current price' });
     }
 
@@ -213,15 +249,32 @@ router.post('/:id/bid', authenticateToken, async (req, res) => {
     const bid = new Bid({
       auction: auctionId,
       user: req.user.userId,
-      bidAmount: bid_amount
+      bidAmount: bidAmountValue
     });
     await bid.save();
 
     // Update current price
-    auction.currentPrice = bid_amount;
+    auction.currentPrice = bidAmountValue;
     await auction.save();
 
-    res.json({ message: 'Bid placed successfully' });
+    // Send email notification to seller (async, don't wait for it)
+    const { sendBidNotificationEmail } = require('../services/emailService');
+    sendBidNotificationEmail(
+      auction.listing.user.email,
+      auction.listing.user.name,
+      biddingUser.name,
+      auction.listing.title,
+      bidAmountValue,
+      auctionId
+    ).catch(err => {
+      console.error('Failed to send bid notification email:', err);
+      // Don't fail the request if email fails
+    });
+
+    res.json({ 
+      message: 'Bid placed successfully',
+      current_price: auction.currentPrice
+    });
   } catch (error) {
     console.error('Place bid error:', error);
     res.status(500).json({ error: 'Server error' });

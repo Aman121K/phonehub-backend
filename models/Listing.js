@@ -65,7 +65,19 @@ const listingSchema = new mongoose.Schema({
     enum: ['single', 'bulk'],
     default: 'single'
   },
-  color: {
+  colour: {
+    type: String,
+    trim: true
+  },
+  version: {
+    type: String,
+    trim: true
+  },
+  charge: {
+    type: String,
+    trim: true
+  },
+  box: {
     type: String,
     trim: true
   },
