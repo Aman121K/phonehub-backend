@@ -20,7 +20,21 @@ router.get('/', async (req, res) => {
       }
     );
 
-    const auctions = await Auction.find({ status: 'live' })
+    // Build filter query
+    const filter = { status: 'live' };
+    
+    // Add price filtering if provided
+    if (req.query.minPrice || req.query.maxPrice) {
+      filter.currentPrice = {};
+      if (req.query.minPrice) {
+        filter.currentPrice.$gte = parseFloat(req.query.minPrice);
+      }
+      if (req.query.maxPrice) {
+        filter.currentPrice.$lte = parseFloat(req.query.maxPrice);
+      }
+    }
+
+    const auctions = await Auction.find(filter)
       .populate({
         path: 'listing',
         match: { status: 'active' },
