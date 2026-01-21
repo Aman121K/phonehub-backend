@@ -71,6 +71,14 @@ const userSchema = new mongoose.Schema({
     enum: ['active', 'blocked'],
     default: 'active',
     index: true
+  },
+  verifiedBatch: {
+    type: Boolean,
+    default: false
+  },
+  verifiedBatchPurchasedAt: {
+    type: Date,
+    default: null
   }
 });
 

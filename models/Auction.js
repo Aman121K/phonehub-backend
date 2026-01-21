@@ -23,8 +23,31 @@ const auctionSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['live', 'ended', 'cancelled'],
+    enum: ['live', 'ended', 'cancelled', 'paid', 'payment_failed'],
     default: 'live'
+  },
+  winner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  secondBidder: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'processing', 'completed', 'failed', 'expired', 'second_bidder_pending'],
+    default: null
+  },
+  paymentDeadline: {
+    type: Date,
+    default: null
+  },
+  paymentCompletedAt: {
+    type: Date,
+    default: null
   },
   createdAt: {
     type: Date,

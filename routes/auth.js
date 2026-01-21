@@ -59,7 +59,8 @@ router.post('/register', [
         userType: user.userType,
         sellerType: user.sellerType,
         businessName: user.businessName,
-        role: user.role
+        role: user.role,
+        verifiedBatch: user.verifiedBatch || false
       }
     });
   } catch (error) {
@@ -112,7 +113,8 @@ router.post('/login', [
         userType: user.userType,
         sellerType: user.sellerType,
         businessName: user.businessName,
-        role: user.role
+        role: user.role,
+        verifiedBatch: user.verifiedBatch || false
       }
     });
   } catch (error) {

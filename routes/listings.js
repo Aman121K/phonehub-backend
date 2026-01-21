@@ -75,10 +75,25 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // Check and update expired featured listings
+    const now = new Date();
+    await Listing.updateMany(
+      {
+        isFeatured: true,
+        featuredExpiryDate: { $lt: now }
+      },
+      {
+        $set: {
+          isFeatured: false,
+          featuredExpiryDate: null
+        }
+      }
+    );
+
     const listings = await Listing.find(query)
-      .populate('user', 'name city phone businessName sellerType')
+      .populate('user', 'name city phone businessName sellerType verifiedBatch')
       .populate('category', 'name slug')
-      .sort({ createdAt: -1 })
+      .sort({ isFeatured: -1, createdAt: -1 }) // Featured listings first
       .limit(parseInt(limit))
       .skip(parseInt(offset));
 
@@ -109,7 +124,9 @@ router.get('/', async (req, res) => {
         city: listing.user.city,
         phone: listing.user.phone,
         businessName: listing.user.businessName,
-        sellerType: listing.user.sellerType
+        sellerType: listing.user.sellerType,
+        verifiedBatch: listing.user.verifiedBatch || false,
+        verifiedBatchPurchasedAt: listing.user.verifiedBatchPurchasedAt || null
       } : null,
       category: listing.category ? {
         _id: listing.category._id,
@@ -129,15 +146,34 @@ router.get('/', async (req, res) => {
 // Get featured listings
 router.get('/featured', async (req, res) => {
   try {
+    // Check and update expired featured listings
+    const now = new Date();
+    await Listing.updateMany(
+      {
+        isFeatured: true,
+        featuredExpiryDate: { $lt: now }
+      },
+      {
+        $set: {
+          isFeatured: false,
+          featuredExpiryDate: null
+        }
+      }
+    );
+
     const listings = await Listing.find({ 
       status: 'active', 
       listingType: 'fixed_price',
-      isFeatured: true 
+      isFeatured: true,
+      $or: [
+        { featuredExpiryDate: { $gt: now } },
+        { featuredExpiryDate: null }
+      ]
     })
-      .populate('user', 'name city businessName sellerType')
+      .populate('user', 'name city businessName sellerType verifiedBatch')
       .populate('category', 'name slug')
       .sort({ createdAt: -1 })
-      .limit(10);
+      .limit(20);
     
     // Format featured listings
     const formattedListings = listings.map(listing => ({
@@ -165,7 +201,9 @@ router.get('/featured', async (req, res) => {
         name: listing.user.sellerType === 'business' && listing.user.businessName ? listing.user.businessName : listing.user.name,
         city: listing.user.city,
         businessName: listing.user.businessName,
-        sellerType: listing.user.sellerType
+        sellerType: listing.user.sellerType,
+        verifiedBatch: listing.user.verifiedBatch || false,
+        verifiedBatchPurchasedAt: listing.user.verifiedBatchPurchasedAt || null
       } : null,
       category: listing.category ? {
         _id: listing.category._id,
@@ -181,7 +219,7 @@ router.get('/featured', async (req, res) => {
         status: 'active', 
         listingType: 'fixed_price' 
       })
-        .populate('user', 'name city businessName sellerType')
+        .populate('user', 'name city businessName sellerType verifiedBatch')
         .populate('category', 'name slug')
         .sort({ createdAt: -1 })
         .limit(10);
@@ -232,7 +270,7 @@ router.get('/featured', async (req, res) => {
 router.get('/latest', async (req, res) => {
   try {
     const listings = await Listing.find({ status: 'active' })
-      .populate('user', 'name city businessName sellerType')
+      .populate('user', 'name city businessName sellerType verifiedBatch')
       .populate('category', 'name slug')
       .sort({ createdAt: -1 })
       .limit(20);
@@ -263,7 +301,9 @@ router.get('/latest', async (req, res) => {
         name: listing.user.sellerType === 'business' && listing.user.businessName ? listing.user.businessName : listing.user.name,
         city: listing.user.city,
         businessName: listing.user.businessName,
-        sellerType: listing.user.sellerType
+        sellerType: listing.user.sellerType,
+        verifiedBatch: listing.user.verifiedBatch || false,
+        verifiedBatchPurchasedAt: listing.user.verifiedBatchPurchasedAt || null
       } : null,
       category: listing.category ? {
         _id: listing.category._id,
@@ -284,7 +324,7 @@ router.get('/latest', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const listing = await Listing.findById(req.params.id)
-      .populate('user', 'name city phone businessName sellerType')
+      .populate('user', 'name city phone businessName sellerType verifiedBatch')
       .populate('category', 'name slug');
 
     if (!listing) {
@@ -319,7 +359,9 @@ router.get('/:id', async (req, res) => {
         city: listing.user.city,
         phone: listing.user.phone,
         businessName: listing.user.businessName,
-        sellerType: listing.user.sellerType
+        sellerType: listing.user.sellerType,
+        verifiedBatch: listing.user.verifiedBatch || false,
+        verifiedBatchPurchasedAt: listing.user.verifiedBatchPurchasedAt || null
       } : null,
       category: listing.category ? {
         _id: listing.category._id,
@@ -465,7 +507,7 @@ router.get('/user/my-listings', authenticateToken, async (req, res) => {
   try {
     const listings = await Listing.find({ user: req.user.userId })
       .populate('category', 'name slug')
-      .populate('user', 'name city businessName sellerType')
+      .populate('user', 'name city businessName sellerType verifiedBatch')
       .sort({ createdAt: -1 });
 
     // Format response to match frontend expectations
@@ -494,7 +536,9 @@ router.get('/user/my-listings', authenticateToken, async (req, res) => {
         name: listing.user.sellerType === 'business' && listing.user.businessName ? listing.user.businessName : listing.user.name,
         city: listing.user.city,
         businessName: listing.user.businessName,
-        sellerType: listing.user.sellerType
+        sellerType: listing.user.sellerType,
+        verifiedBatch: listing.user.verifiedBatch || false,
+        verifiedBatchPurchasedAt: listing.user.verifiedBatchPurchasedAt || null
       } : null,
       category: listing.category ? {
         _id: listing.category._id,
@@ -647,7 +691,7 @@ router.put('/:id', authenticateToken, (req, res, next) => {
     await listing.save();
 
     // Populate and format response
-    await listing.populate('user', 'name city phone businessName sellerType');
+    await listing.populate('user', 'name city phone businessName sellerType verifiedBatch');
     await listing.populate('category', 'name slug');
 
     const formattedListing = {
@@ -676,7 +720,9 @@ router.put('/:id', authenticateToken, (req, res, next) => {
         city: listing.user.city,
         phone: listing.user.phone,
         businessName: listing.user.businessName,
-        sellerType: listing.user.sellerType
+        sellerType: listing.user.sellerType,
+        verifiedBatch: listing.user.verifiedBatch || false,
+        verifiedBatchPurchasedAt: listing.user.verifiedBatchPurchasedAt || null
       } : null,
       category: listing.category ? {
         _id: listing.category._id,

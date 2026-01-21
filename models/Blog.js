@@ -20,6 +20,10 @@ const blogSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  description: {
+    type: String,
+    trim: true
+  },
   featuredImage: {
     type: String,
     trim: true

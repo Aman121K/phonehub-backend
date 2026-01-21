@@ -28,6 +28,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/blogs', require('./routes/blogs'));
+app.use('/api/payments', require('./routes/payments'));
 
 // Locations endpoint (alias for /api/categories/locations)
 app.get('/api/locations', async (req, res) => {

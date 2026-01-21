@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "check-payments": "node scripts/checkExpiredPayments.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.946.0",
@@ -18,7 +19,8 @@
     "mongodb": "^6.3.0",
     "mongoose": "^8.0.3",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^6.10.1"
+    "nodemailer": "^6.10.1",
+    "stripe": "^20.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

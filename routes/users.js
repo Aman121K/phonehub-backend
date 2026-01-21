@@ -23,6 +23,8 @@ router.get('/profile', authenticateToken, async (req, res) => {
       userType: user.userType,
       sellerType: user.sellerType,
       businessName: user.businessName,
+      verifiedBatch: user.verifiedBatch,
+      verifiedBatchPurchasedAt: user.verifiedBatchPurchasedAt,
       createdAt: user.createdAt
     });
   } catch (error) {

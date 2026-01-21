@@ -94,6 +94,10 @@ const listingSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  featuredExpiryDate: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

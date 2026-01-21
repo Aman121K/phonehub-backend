@@ -124,7 +124,7 @@ router.patch('/listings/:id', async (req, res) => {
 // Get users list
 router.get('/users', async (_req, res) => {
   try {
-    const users = await User.find().select('name email city userType sellerType businessName role status createdAt');
+    const users = await User.find().select('name email city userType sellerType businessName role status verifiedBatch verifiedBatchPurchasedAt createdAt');
     res.json(users);
   } catch (error) {
     console.error('Admin get users error:', error);
@@ -272,7 +272,7 @@ router.get('/blogs/:id', async (req, res) => {
 // Create blog
 router.post('/blogs', async (req, res) => {
   try {
-    const { title, slug, content, excerpt, featuredImage, status, tags } = req.body;
+    const { title, slug, content, excerpt, description, featuredImage, status, tags } = req.body;
     
     // Validation
     if (!title || !slug || !content) {
@@ -291,6 +291,7 @@ router.post('/blogs', async (req, res) => {
       slug: slug.trim(),
       content: content.trim(),
       excerpt: excerpt ? excerpt.trim() : '',
+      description: description ? description.trim() : '',
       featuredImage: featuredImage ? featuredImage.trim() : '',
       author: req.user.userId,
       status: status || 'draft',
@@ -325,7 +326,7 @@ router.post('/blogs', async (req, res) => {
 // Update blog
 router.patch('/blogs/:id', async (req, res) => {
   try {
-    const { title, slug, content, excerpt, featuredImage, status, tags } = req.body;
+    const { title, slug, content, excerpt, description, featuredImage, status, tags } = req.body;
     const blog = await Blog.findById(req.params.id);
     if (!blog) {
       return res.status(404).json({ error: 'Blog not found' });
@@ -340,6 +341,7 @@ router.patch('/blogs/:id', async (req, res) => {
     }
     if (content) blog.content = content;
     if (excerpt !== undefined) blog.excerpt = excerpt;
+    if (description !== undefined) blog.description = description;
     if (featuredImage !== undefined) blog.featuredImage = featuredImage;
     if (status) {
       blog.status = status;

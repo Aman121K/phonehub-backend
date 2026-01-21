@@ -7,9 +7,21 @@ router.get('/', async (req, res) => {
   try {
     const blogs = await Blog.find({ status: 'published' })
       .populate('author', 'name')
-      .sort({ publishedAt: -1 })
-      .select('-content'); // Don't send full content in list
-    res.json(blogs);
+      .sort({ publishedAt: -1 });
+    
+    // Format blogs to ensure description is available
+    const formattedBlogs = blogs.map(blog => {
+      const blogObj = blog.toObject();
+      // Use description if available, otherwise use excerpt
+      if (!blogObj.description && !blogObj.excerpt) {
+        blogObj.description = 'No description available.';
+      } else {
+        blogObj.description = blogObj.description || blogObj.excerpt;
+      }
+      return blogObj;
+    });
+    
+    res.json(formattedBlogs);
   } catch (error) {
     console.error('Get blogs error:', error);
     res.status(500).json({ error: 'Server error' });

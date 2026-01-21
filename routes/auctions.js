@@ -9,16 +9,63 @@ const { authenticateToken } = require('../middleware/auth');
 // Get all auctions
 router.get('/', async (req, res) => {
   try {
-    // Update expired auctions
-    await Auction.updateMany(
-      { 
-        status: 'live',
-        endDate: { $lt: new Date() }
-      },
-      { 
-        $set: { status: 'ended' }
+    const now = new Date();
+    
+    // Update expired auctions and determine winners
+    const expiredAuctions = await Auction.find({
+      status: 'live',
+      endDate: { $lt: now }
+    });
+
+    for (const auction of expiredAuctions) {
+      auction.status = 'ended';
+      await auction.save();
+
+      // If no winner determined yet, determine it
+      if (!auction.winner) {
+        const bids = await Bid.find({ auction: auction._id })
+          .populate('user')
+          .sort({ bidAmount: -1, createdAt: 1 });
+
+        if (bids.length > 0) {
+          const winnerBid = bids[0];
+          const secondBidder = bids.length > 1 ? bids[1].user : null;
+
+          auction.winner = winnerBid.user._id;
+          auction.secondBidder = secondBidder ? secondBidder._id : null;
+          auction.paymentStatus = 'pending';
+          auction.paymentDeadline = new Date(Date.now() + 48 * 60 * 60 * 1000);
+          await auction.save();
+
+          // Create payment session for winner
+          try {
+            const { createPaymentSession } = require('../services/paymentService');
+            const { payment, paymentLink } = await createPaymentSession({
+              userId: winnerBid.user._id.toString(),
+              paymentType: 'auction_winner',
+              amount: auction.currentPrice,
+              auctionId: auction._id.toString(),
+              paymentDeadline: auction.paymentDeadline,
+              isSecondBidder: false
+            });
+
+            // Send email to winner
+            const { sendWinnerPaymentEmail } = require('../services/emailService');
+            const listing = await Listing.findById(auction.listing);
+            await sendWinnerPaymentEmail(
+              winnerBid.user.email,
+              winnerBid.user.name,
+              listing ? listing.title : 'Auction Item',
+              auction.currentPrice,
+              paymentLink,
+              auction.paymentDeadline
+            ).catch(err => console.error('Failed to send winner email:', err));
+          } catch (error) {
+            console.error(`Error creating payment for auction ${auction._id}:`, error);
+          }
+        }
       }
-    );
+    }
 
     // Build filter query
     const filter = { status: 'live' };
@@ -311,6 +358,98 @@ router.post('/:id/bid', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Place bid error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Determine auction winners (called when auction ends)
+router.post('/determine-winners', async (req, res) => {
+  try {
+    // This endpoint should be protected in production (e.g., with API key or admin auth)
+    const apiKey = req.headers['x-api-key'];
+    if (apiKey !== process.env.CRON_API_KEY && process.env.NODE_ENV === 'production' && req.user?.role !== 'admin') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const now = new Date();
+    
+    // Find ended auctions without winners
+    const endedAuctions = await Auction.find({
+      status: 'ended',
+      endDate: { $lte: now },
+      winner: null
+    }).populate('listing');
+
+    const results = {
+      processed: 0,
+      winnersDetermined: 0,
+      noBids: 0,
+      errors: []
+    };
+
+    for (const auction of endedAuctions) {
+      try {
+        // Get all bids for this auction, sorted by amount (descending) and time (ascending)
+        const bids = await Bid.find({ auction: auction._id })
+          .populate('user')
+          .sort({ bidAmount: -1, createdAt: 1 });
+
+        if (bids.length === 0) {
+          results.noBids++;
+          continue;
+        }
+
+        // Winner is the highest bidder
+        const winnerBid = bids[0];
+        const winner = winnerBid.user;
+
+        // Second highest bidder (if exists)
+        const secondBidder = bids.length > 1 ? bids[1].user : null;
+
+        // Update auction
+        auction.winner = winner._id;
+        auction.secondBidder = secondBidder ? secondBidder._id : null;
+        auction.paymentStatus = 'pending';
+        auction.paymentDeadline = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+        await auction.save();
+
+        // Create payment session for winner
+        const { createPaymentSession } = require('../services/paymentService');
+        const { payment, paymentLink } = await createPaymentSession({
+          userId: winner._id.toString(),
+          paymentType: 'auction_winner',
+          amount: auction.currentPrice,
+          auctionId: auction._id.toString(),
+          paymentDeadline: auction.paymentDeadline,
+          isSecondBidder: false
+        });
+
+        // Send email to winner
+        const { sendWinnerPaymentEmail } = require('../services/emailService');
+        await sendWinnerPaymentEmail(
+          winner.email,
+          winner.name,
+          auction.listing.title,
+          auction.currentPrice,
+          paymentLink,
+          auction.paymentDeadline
+        ).catch(err => console.error('Failed to send winner email:', err));
+
+        results.winnersDetermined++;
+        results.processed++;
+      } catch (error) {
+        console.error(`Error processing auction ${auction._id}:`, error);
+        results.errors.push({ auctionId: auction._id, error: error.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Winners determined',
+      results
+    });
+  } catch (error) {
+    console.error('Error determining winners:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
