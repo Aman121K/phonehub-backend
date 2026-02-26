@@ -66,6 +66,7 @@ router.post('/webhook', express.json(), async (req, res) => {
               price: parseFloat(listingData.price),
               perPrice: listingData.per_price ? parseFloat(listingData.per_price) : null,
               storage: listingData.storage || null,
+              brand: listingData.brand || null,
               condition: listingData.condition || null,
               city: listingData.city,
               listingType: listingData.listing_type || 'fixed_price',
@@ -73,7 +74,9 @@ router.post('/webhook', express.json(), async (req, res) => {
               images: listingData.images || [],
               sellType: listingData.sellType || 'single',
               colour: listingData.colour || null,
-              version: listingData.version || null,
+              version: (listingData.device_os_type || listingData.deviceOsType || "ios") === "ios" ? (listingData.version || null) : null,
+              ram: (listingData.device_os_type || listingData.deviceOsType || "ios") === "android" ? (listingData.ram || null) : null,
+              deviceOsType: (listingData.device_os_type || listingData.deviceOsType || "ios"),
               charge: listingData.charge || null,
               box: listingData.box || null,
               warranty: listingData.warranty === true || listingData.warranty === 'Yes' || listingData.warranty === 'yes' || listingData.warranty === 'true',
@@ -252,6 +255,17 @@ router.post('/featured-listing-before-create', authenticateToken, (req, res, nex
 
     if (!listingData || !duration) {
       return res.status(400).json({ error: 'Listing data and duration are required' });
+    }
+
+    const selectedDeviceOsType = String(listingData.device_os_type || listingData.deviceOsType || 'ios').toLowerCase();
+    if (!['android', 'ios'].includes(selectedDeviceOsType)) {
+      return res.status(400).json({ error: 'Invalid device OS type. Allowed values: android, ios' });
+    }
+    if (selectedDeviceOsType === 'android' && !String(listingData.ram || '').trim()) {
+      return res.status(400).json({ error: 'RAM is required for Android listings' });
+    }
+    if (selectedDeviceOsType === 'ios' && !String(listingData.version || '').trim()) {
+      return res.status(400).json({ error: 'Version is required for iOS listings' });
     }
 
     // Validate images: must have at least 1, max 5
@@ -579,6 +593,7 @@ router.post('/verify/:paymentId', authenticateToken, async (req, res) => {
               price: parseFloat(listingData.price),
               perPrice: listingData.per_price ? parseFloat(listingData.per_price) : null,
               storage: listingData.storage || null,
+              brand: listingData.brand || null,
               condition: listingData.condition || null,
               city: listingData.city,
               listingType: listingData.listing_type || 'fixed_price',
@@ -586,7 +601,9 @@ router.post('/verify/:paymentId', authenticateToken, async (req, res) => {
               images: listingData.images || [],
               sellType: listingData.sellType || 'single',
               colour: listingData.colour || null,
-              version: listingData.version || null,
+              version: (listingData.device_os_type || listingData.deviceOsType || "ios") === "ios" ? (listingData.version || null) : null,
+              ram: (listingData.device_os_type || listingData.deviceOsType || "ios") === "android" ? (listingData.ram || null) : null,
+              deviceOsType: (listingData.device_os_type || listingData.deviceOsType || "ios"),
               charge: listingData.charge || null,
               box: listingData.box || null,
               warranty: listingData.warranty === true || listingData.warranty === 'Yes' || listingData.warranty === 'yes' || listingData.warranty === 'true',
@@ -724,5 +741,4 @@ router.post('/check-expired', async (req, res) => {
 });
 
 module.exports = router;
-
 

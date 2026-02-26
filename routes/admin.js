@@ -46,6 +46,7 @@ router.post('/listings', async (req, res) => {
       description,
       price,
       storage,
+      brand,
       condition,
       city,
       listing_type,
@@ -55,11 +56,26 @@ router.post('/listings', async (req, res) => {
       end_date,
       sellType,
       color,
+      device_os_type,
+      deviceOsType,
+      ram,
+      version,
       warranty,
       quantity,
       isFeatured,
       status
     } = req.body;
+
+    const selectedDeviceOsType = String(device_os_type || deviceOsType || 'ios').toLowerCase();
+    if (!['android', 'ios'].includes(selectedDeviceOsType)) {
+      return res.status(400).json({ error: 'Invalid device OS type. Allowed values: android, ios' });
+    }
+    if (selectedDeviceOsType === 'android' && !String(ram || '').trim()) {
+      return res.status(400).json({ error: 'RAM is required for Android listings' });
+    }
+    if (selectedDeviceOsType === 'ios' && !String(version || '').trim()) {
+      return res.status(400).json({ error: 'Version is required for iOS listings' });
+    }
 
     const listing = new Listing({
       user: req.user.userId,
@@ -68,6 +84,7 @@ router.post('/listings', async (req, res) => {
       description,
       price,
       storage,
+      brand: brand || null,
       condition,
       city,
       listingType: listing_type || 'fixed_price',
@@ -75,6 +92,9 @@ router.post('/listings', async (req, res) => {
       images: images || (image_url ? [image_url] : []),
       sellType: sellType || 'single',
       color: color || null,
+      deviceOsType: selectedDeviceOsType,
+      ram: selectedDeviceOsType === 'android' ? (ram || null) : null,
+      version: selectedDeviceOsType === 'ios' ? (version || null) : null,
       warranty: warranty === true || warranty === 'Yes' || warranty === 'yes',
       quantity: quantity || 1,
       isFeatured: isFeatured === true,
@@ -155,15 +175,19 @@ router.patch('/users/:id/status', async (req, res) => {
 // Create category
 router.post('/categories', async (req, res) => {
   try {
-    const { name, slug } = req.body;
+    const { name, slug, deviceOsType, device_os_type } = req.body;
     if (!name || !slug) {
       return res.status(400).json({ error: 'Name and slug are required' });
+    }
+    const normalizedDeviceOsType = String(deviceOsType || device_os_type || 'ios').toLowerCase();
+    if (!['android', 'ios'].includes(normalizedDeviceOsType)) {
+      return res.status(400).json({ error: 'Invalid device OS type. Allowed values: android, ios' });
     }
     const exists = await Category.findOne({ slug });
     if (exists) {
       return res.status(400).json({ error: 'Category already exists' });
     }
-    const category = new Category({ name, slug });
+    const category = new Category({ name, slug, deviceOsType: normalizedDeviceOsType });
     await category.save();
     res.status(201).json({ message: 'Category created', category });
   } catch (error) {
@@ -175,7 +199,7 @@ router.post('/categories', async (req, res) => {
 // Update category
 router.patch('/categories/:id', async (req, res) => {
   try {
-    const { name, slug } = req.body;
+    const { name, slug, deviceOsType, device_os_type } = req.body;
     const category = await Category.findById(req.params.id);
     if (!category) {
       return res.status(404).json({ error: 'Category not found' });
@@ -187,6 +211,13 @@ router.patch('/categories/:id', async (req, res) => {
         return res.status(400).json({ error: 'Slug already exists' });
       }
       category.slug = slug;
+    }
+    if (deviceOsType !== undefined || device_os_type !== undefined) {
+      const normalizedDeviceOsType = String(deviceOsType || device_os_type || '').toLowerCase();
+      if (!['android', 'ios'].includes(normalizedDeviceOsType)) {
+        return res.status(400).json({ error: 'Invalid device OS type. Allowed values: android, ios' });
+      }
+      category.deviceOsType = normalizedDeviceOsType;
     }
     await category.save();
     res.json({ message: 'Category updated', category });
@@ -374,4 +405,3 @@ router.delete('/blogs/:id', async (req, res) => {
 });
 
 module.exports = router;
-

@@ -13,6 +13,11 @@ const categorySchema = new mongoose.Schema({
     lowercase: true,
     trim: true
   },
+  deviceOsType: {
+    type: String,
+    enum: ['android', 'ios'],
+    default: 'ios'
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -20,4 +25,3 @@ const categorySchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('Category', categorySchema);
-

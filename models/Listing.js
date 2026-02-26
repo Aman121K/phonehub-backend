@@ -33,6 +33,10 @@ const listingSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  brand: {
+    type: String,
+    trim: true
+  },
   condition: {
     type: String,
     trim: true
@@ -73,6 +77,15 @@ const listingSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  ram: {
+    type: String,
+    trim: true
+  },
+  deviceOsType: {
+    type: String,
+    enum: ['android', 'ios'],
+    default: 'ios'
+  },
   charge: {
     type: String,
     trim: true
@@ -112,8 +125,9 @@ listingSchema.index({ city: 1, status: 1 });
 listingSchema.index({ category: 1, status: 1 });
 listingSchema.index({ listingType: 1, status: 1 });
 listingSchema.index({ sellType: 1, status: 1 });
+listingSchema.index({ brand: 1, status: 1 });
+listingSchema.index({ deviceOsType: 1, status: 1 });
 listingSchema.index({ title: 'text', description: 'text' });
 listingSchema.index({ isFeatured: 1, status: 1 });
 
 module.exports = mongoose.model('Listing', listingSchema);
-

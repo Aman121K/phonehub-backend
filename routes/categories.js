@@ -19,6 +19,7 @@ router.get('/', async (req, res) => {
           _id: category._id,
           name: category.name,
           slug: category.slug,
+          deviceOsType: category.deviceOsType || 'ios',
           ad_count: count
         };
       })

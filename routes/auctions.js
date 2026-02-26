@@ -238,7 +238,10 @@ router.get('/:id', async (req, res) => {
       end_date: auction.endDate,
       status: auction.status,
       // Full phone details
+      brand: auction.listing.brand || null,
       version: auction.listing.version || null,
+      ram: auction.listing.ram || null,
+      deviceOsType: auction.listing.deviceOsType || 'ios',
       colour: auction.listing.colour || null,
       charge: auction.listing.charge || null,
       box: auction.listing.box || null,

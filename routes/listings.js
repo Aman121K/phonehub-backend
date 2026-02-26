@@ -10,7 +10,7 @@ const { uploadImagesToS3, processS3Upload } = require('../middleware/uploadS3');
 // Get all listings
 router.get('/', async (req, res) => {
   try {
-    const { city, category, type, search, model, storage, condition, minPrice, maxPrice, limit = 20, offset = 0 } = req.query;
+    const { city, category, type, search, model, storage, condition, brand, minPrice, maxPrice, limit = 20, offset = 0 } = req.query;
     
     const query = { status: 'active' }; // Only show active listings (excludes blocked, sold, expired)
     
@@ -64,6 +64,11 @@ router.get('/', async (req, res) => {
       query.condition = decodedCondition;
     }
 
+    // Handle brand filter
+    if (brand) {
+      query.brand = { $regex: brand, $options: 'i' };
+    }
+
     // Handle price range filters
     if (minPrice || maxPrice) {
       query.price = {};
@@ -106,11 +111,14 @@ router.get('/', async (req, res) => {
       perPrice: listing.perPrice,
       condition: listing.condition,
       storage: listing.storage,
+      brand: listing.brand,
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
       colour: listing.colour,
       version: listing.version,
+      ram: listing.ram,
+      deviceOsType: listing.deviceOsType,
       charge: listing.charge,
       box: listing.box,
       warranty: listing.warranty,
@@ -184,11 +192,14 @@ router.get('/featured', async (req, res) => {
       perPrice: listing.perPrice,
       condition: listing.condition,
       storage: listing.storage,
+      brand: listing.brand,
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
       colour: listing.colour,
       version: listing.version,
+      ram: listing.ram,
+      deviceOsType: listing.deviceOsType,
       charge: listing.charge,
       box: listing.box,
       warranty: listing.warranty,
@@ -232,10 +243,14 @@ router.get('/featured', async (req, res) => {
       perPrice: listing.perPrice,
       condition: listing.condition,
       storage: listing.storage,
+      brand: listing.brand,
       city: listing.city,
       listingType: listing.listingType,
         sellType: listing.sellType,
         colour: listing.colour,
+        version: listing.version,
+        ram: listing.ram,
+        deviceOsType: listing.deviceOsType,
         warranty: listing.warranty,
         quantity: listing.quantity,
         imageUrl: listing.imageUrl,
@@ -284,11 +299,14 @@ router.get('/latest', async (req, res) => {
       perPrice: listing.perPrice,
       condition: listing.condition,
       storage: listing.storage,
+      brand: listing.brand,
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
       colour: listing.colour,
       version: listing.version,
+      ram: listing.ram,
+      deviceOsType: listing.deviceOsType,
       charge: listing.charge,
       box: listing.box,
       warranty: listing.warranty,
@@ -340,11 +358,14 @@ router.get('/:id', async (req, res) => {
       perPrice: listing.perPrice,
       condition: listing.condition,
       storage: listing.storage,
+      brand: listing.brand,
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
       colour: listing.colour,
       version: listing.version,
+      ram: listing.ram,
+      deviceOsType: listing.deviceOsType,
       charge: listing.charge,
       box: listing.box,
       warranty: listing.warranty,
@@ -368,6 +389,8 @@ router.get('/:id', async (req, res) => {
         name: listing.category.name,
         slug: listing.category.slug
       } : null,
+      isFeatured: listing.isFeatured || false,
+      featuredExpiryDate: listing.featuredExpiryDate || null,
       createdAt: listing.createdAt
     };
 
@@ -425,6 +448,7 @@ router.post('/', authenticateToken, async (req, res, next) => {
       price, 
       per_price,
       storage, 
+      brand,
       condition, 
       city, 
       listing_type, 
@@ -435,11 +459,25 @@ router.post('/', authenticateToken, async (req, res, next) => {
       sellType,
       colour,
       version,
+      ram,
+      device_os_type,
+      deviceOsType,
       charge,
       box,
       warranty,
       quantity
     } = req.body;
+
+    const selectedDeviceOsType = String(device_os_type || deviceOsType || 'ios').toLowerCase();
+    if (!['android', 'ios'].includes(selectedDeviceOsType)) {
+      return res.status(400).json({ error: 'Invalid device OS type. Allowed values: android, ios' });
+    }
+    if (selectedDeviceOsType === 'android' && !String(ram || '').trim()) {
+      return res.status(400).json({ error: 'RAM is required for Android listings' });
+    }
+    if (selectedDeviceOsType === 'ios' && !String(version || '').trim()) {
+      return res.status(400).json({ error: 'Version is required for iOS listings' });
+    }
 
     // Validate images: must have at least 1, max 5
     if (imageUrls.length === 0 && !image_url && (!images || images.length === 0)) {
@@ -467,6 +505,7 @@ router.post('/', authenticateToken, async (req, res, next) => {
       price: parseFloat(price),
       perPrice: per_price ? parseFloat(per_price) : null,
       storage,
+      brand: brand || null,
       condition,
       city,
       listingType: listing_type || 'fixed_price',
@@ -474,7 +513,9 @@ router.post('/', authenticateToken, async (req, res, next) => {
       images: finalImages,
       sellType: sellType || 'single',
       colour: colour || null,
-      version: version || null,
+      version: selectedDeviceOsType === 'ios' ? (version || null) : null,
+      ram: selectedDeviceOsType === 'android' ? (ram || null) : null,
+      deviceOsType: selectedDeviceOsType,
       charge: charge || null,
       box: box || null,
       warranty: warranty === true || warranty === 'Yes' || warranty === 'yes' || warranty === 'true',
@@ -519,11 +560,14 @@ router.get('/user/my-listings', authenticateToken, async (req, res) => {
       perPrice: listing.perPrice,
       condition: listing.condition,
       storage: listing.storage,
+      brand: listing.brand,
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
       colour: listing.colour,
       version: listing.version,
+      ram: listing.ram,
+      deviceOsType: listing.deviceOsType,
       charge: listing.charge,
       box: listing.box,
       warranty: listing.warranty,
@@ -598,12 +642,16 @@ router.put('/:id', authenticateToken, (req, res, next) => {
       price,
       per_price,
       storage,
+      brand,
       condition,
       city,
       listing_type,
       sellType,
       colour,
       version,
+      ram,
+      device_os_type,
+      deviceOsType,
       charge,
       box,
       warranty,
@@ -674,12 +722,34 @@ router.put('/:id', authenticateToken, (req, res, next) => {
     if (price !== undefined) listing.price = parseFloat(price);
     if (per_price !== undefined) listing.perPrice = per_price ? parseFloat(per_price) : null;
     if (storage !== undefined) listing.storage = storage;
+    if (brand !== undefined) listing.brand = brand;
     if (condition !== undefined) listing.condition = condition;
     if (city) listing.city = city;
     if (listing_type) listing.listingType = listing_type;
     if (sellType) listing.sellType = sellType;
     if (colour !== undefined) listing.colour = colour;
     if (version !== undefined) listing.version = version;
+    if (ram !== undefined) listing.ram = ram;
+    if (device_os_type !== undefined || deviceOsType !== undefined) {
+      const incomingDeviceOsType = String(device_os_type || deviceOsType || '').toLowerCase();
+      if (!['android', 'ios'].includes(incomingDeviceOsType)) {
+        return res.status(400).json({ error: 'Invalid device OS type. Allowed values: android, ios' });
+      }
+      listing.deviceOsType = incomingDeviceOsType;
+    }
+    const effectiveDeviceOsType = listing.deviceOsType || 'ios';
+    if (effectiveDeviceOsType === 'android' && !String(listing.ram || '').trim()) {
+      return res.status(400).json({ error: 'RAM is required for Android listings' });
+    }
+    if (effectiveDeviceOsType === 'ios' && !String(listing.version || '').trim()) {
+      return res.status(400).json({ error: 'Version is required for iOS listings' });
+    }
+    if (effectiveDeviceOsType === 'android') {
+      listing.version = null;
+    }
+    if (effectiveDeviceOsType === 'ios') {
+      listing.ram = null;
+    }
     if (charge !== undefined) listing.charge = charge;
     if (box !== undefined) listing.box = box;
     if (warranty !== undefined) listing.warranty = warranty === true || warranty === 'Yes' || warranty === 'yes' || warranty === 'true';
@@ -702,11 +772,14 @@ router.put('/:id', authenticateToken, (req, res, next) => {
       perPrice: listing.perPrice,
       condition: listing.condition,
       storage: listing.storage,
+      brand: listing.brand,
       city: listing.city,
       listingType: listing.listingType,
       sellType: listing.sellType,
       colour: listing.colour,
       version: listing.version,
+      ram: listing.ram,
+      deviceOsType: listing.deviceOsType,
       charge: listing.charge,
       box: listing.box,
       warranty: listing.warranty,
