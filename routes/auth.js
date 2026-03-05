@@ -5,6 +5,22 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const { body, validationResult } = require('express-validator');
 const { authenticateToken } = require('../middleware/auth');
+const { sendEmailVerificationEmail } = require('../services/emailService');
+
+const EMAIL_VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const EMAIL_VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
+
+const createEmailVerificationToken = async (user) => {
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+  user.emailVerificationToken = tokenHash;
+  user.emailVerificationExpires = new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_TTL_MS);
+  user.emailVerificationSentAt = new Date();
+  await user.save();
+
+  return rawToken;
+};
 
 // Register
 router.post('/register', [
@@ -31,6 +47,7 @@ router.post('/register', [
       name,
       email: email.toLowerCase(),
       password,
+      emailVerified: false,
       phone: phone || null,
       city: city || null,
       userType: userType || 'buyer',
@@ -39,29 +56,16 @@ router.post('/register', [
     });
 
     await user.save();
+    const verificationToken = await createEmailVerificationToken(user);
+    const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
 
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || 'your_jwt_secret_key_here',
-      { expiresIn: '7d' }
-    );
+    await sendEmailVerificationEmail(user.email, user.name, verifyUrl);
 
     res.status(201).json({
-      message: 'User registered successfully',
-      token,
-      user: { 
-        id: user._id,
-        _id: user._id,
-        name: user.name, 
-        email: user.email, 
-        phone: user.phone, 
-        city: user.city,
-        userType: user.userType,
-        sellerType: user.sellerType,
-        businessName: user.businessName,
-        role: user.role,
-        verifiedBatch: user.verifiedBatch || false
-      }
+      success: true,
+      requiresEmailVerification: true,
+      message: 'Registration successful. Please verify your email before logging in.',
+      email: user.email
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -94,6 +98,14 @@ router.post('/login', [
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    if (user.emailVerified === false) {
+      return res.status(403).json({
+        error: 'Email not verified. Please verify your email to continue.',
+        code: 'EMAIL_NOT_VERIFIED',
+        email: user.email
+      });
+    }
+
     const token = jwt.sign(
       { userId: user._id, email: user.email, role: user.role },
       process.env.JWT_SECRET || 'your_jwt_secret_key_here',
@@ -114,6 +126,7 @@ router.post('/login', [
         sellerType: user.sellerType,
         businessName: user.businessName,
         role: user.role,
+        emailVerified: user.emailVerified !== false,
         verifiedBatch: user.verifiedBatch || false
       }
     });
@@ -157,6 +170,86 @@ router.post(
       });
     } catch (error) {
       console.error('Forgot password error:', error);
+      res.status(500).json({ success: false, message: 'Server error' });
+    }
+  }
+);
+
+// Verify email
+router.get('/verify-email', async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return res.status(400).json({ success: false, message: 'Verification token is required' });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await User.findOne({
+      emailVerificationToken: tokenHash,
+      emailVerificationExpires: { $gt: new Date() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Verification link is invalid or expired' });
+    }
+
+    user.emailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+    user.emailVerificationSentAt = undefined;
+    await user.save();
+
+    return res.json({ success: true, message: 'Email verified successfully. You can now log in.' });
+  } catch (error) {
+    console.error('Verify email error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Resend verification email
+router.post(
+  '/resend-verification',
+  [body('email').isEmail().withMessage('Valid email is required')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, message: 'Invalid email' });
+      }
+
+      const { email } = req.body;
+      const normalizedEmail = email.toLowerCase();
+      const user = await User.findOne({ email: normalizedEmail });
+
+      // Generic message to reduce account enumeration risk
+      const genericResponse = {
+        success: true,
+        message: 'If this email is registered and unverified, a verification link has been sent.'
+      };
+
+      if (!user || user.emailVerified === true) {
+        return res.json(genericResponse);
+      }
+
+      const lastSentAt = user.emailVerificationSentAt ? new Date(user.emailVerificationSentAt).getTime() : 0;
+      const elapsed = Date.now() - lastSentAt;
+      if (elapsed < EMAIL_VERIFICATION_RESEND_COOLDOWN_MS) {
+        const secondsRemaining = Math.ceil((EMAIL_VERIFICATION_RESEND_COOLDOWN_MS - elapsed) / 1000);
+        return res.status(429).json({
+          success: false,
+          message: `Please wait ${secondsRemaining} seconds before requesting another email.`
+        });
+      }
+
+      const verificationToken = await createEmailVerificationToken(user);
+      const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
+      await sendEmailVerificationEmail(user.email, user.name, verifyUrl);
+
+      return res.json(genericResponse);
+    } catch (error) {
+      console.error('Resend verification error:', error);
       res.status(500).json({ success: false, message: 'Server error' });
     }
   }

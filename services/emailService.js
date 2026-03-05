@@ -19,6 +19,79 @@ const createTransporter = () => {
   return transporter;
 };
 
+// Send signup email verification
+const sendEmailVerificationEmail = async (userEmail, userName, verificationLink) => {
+  try {
+    if (!process.env.SMTP_USER && !process.env.EMAIL_USER) {
+      console.log('Email not configured. Would send verification email to:', userEmail);
+      console.log('Verification link:', verificationLink);
+      return { success: true, skipped: true };
+    }
+
+    const transporter = createTransporter();
+
+    const mailOptions = {
+      from: `"PhoneHub" <support@phonehub.ae>`,
+      to: userEmail,
+      subject: 'Verify your PhoneHub email address',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+            .button { display: inline-block; padding: 14px 28px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin-top: 20px; font-weight: bold; }
+            .note { background: #ecfeff; border-left: 4px solid #0891b2; padding: 12px; border-radius: 4px; margin-top: 20px; }
+            .footer { text-align: center; margin-top: 30px; color: #64748b; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Verify Your Email</h1>
+            </div>
+            <div class="content">
+              <p>Hello ${userName},</p>
+              <p>Thanks for signing up on PhoneHub. Please confirm your email address to activate your account.</p>
+              <div style="text-align:center;">
+                <a class="button" href="${verificationLink}">Verify Email</a>
+              </div>
+              <div class="note">
+                <p style="margin:0;"><strong>Security note:</strong> This link expires in 24 hours.</p>
+              </div>
+              <p style="margin-top: 20px;">If you didn't create this account, you can safely ignore this email.</p>
+            </div>
+            <div class="footer">
+              <p>This is an automated message from PhoneHub. Please do not reply.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+        Verify your PhoneHub email
+
+        Hello ${userName},
+
+        Please verify your email address by opening this link:
+        ${verificationLink}
+
+        This link expires in 24 hours. If you did not create this account, ignore this email.
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email verification sent:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Error sending verification email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 // Send bid notification email to seller
 const sendBidNotificationEmail = async (sellerEmail, sellerName, buyerName, itemTitle, bidAmount, auctionId) => {
   try {
@@ -886,6 +959,7 @@ const sendFeaturedListingPaymentFailureEmail = async (userEmail, userName, listi
 };
 
 module.exports = {
+  sendEmailVerificationEmail,
   sendBidNotificationEmail,
   sendWinnerPaymentEmail,
   sendSecondBidderPaymentEmail,
@@ -895,4 +969,3 @@ module.exports = {
   sendFeaturedListingInvoice,
   sendFeaturedListingPaymentFailureEmail,
 };
-

@@ -66,6 +66,22 @@ const userSchema = new mongoose.Schema({
   resetPasswordExpires: {
     type: Date
   },
+  emailVerified: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  emailVerificationToken: {
+    type: String,
+    index: true,
+    sparse: true
+  },
+  emailVerificationExpires: {
+    type: Date
+  },
+  emailVerificationSentAt: {
+    type: Date
+  },
   status: {
     type: String,
     enum: ['active', 'blocked'],
@@ -93,4 +109,3 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 module.exports = mongoose.model('User', userSchema);
-

@@ -23,6 +23,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
       userType: user.userType,
       sellerType: user.sellerType,
       businessName: user.businessName,
+      emailVerified: user.emailVerified !== false,
       verifiedBatch: user.verifiedBatch,
       verifiedBatchPurchasedAt: user.verifiedBatchPurchasedAt,
       createdAt: user.createdAt
